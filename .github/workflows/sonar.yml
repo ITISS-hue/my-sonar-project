@@ -1,16 +1,21 @@
 name: Sonar Scan
+
 on:
   push:
     branches: [ main ]
+
 jobs:
   sonarcloud:
     runs-on: ubuntu-latest
     steps:
+      # Code repository ko pipeline runner par clone karne ke liye
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # Naya official drop-in replacement action jo deprecation issue ko fix karega
       - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@master
+        uses: SonarSource/sonarqube-scan-action@v5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
