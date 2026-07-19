@@ -28,7 +28,7 @@ jobs:
   # ==========================================
   container-security:
     name: Container Build, Scan & Push (SCA Lifecycle)
-    needs: sonarcloud # Strict Security Gate: Source Code check pass hone par hi chalega
+    needs: sonarcloud
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Source Code Tree
@@ -46,7 +46,7 @@ jobs:
         with:
           image-ref: '${{ secrets.DOCKERHUB_USERNAME }}/my-sonar-project:latest'
           format: 'table'
-          exit-code: '1' # Critical Vulnerability milne par pipeline yahi crash hokar CD block karegi
+          exit-code: '1'
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL'          
@@ -62,11 +62,11 @@ jobs:
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/my-sonar-project:latest
 
   # ==========================================
-  # STAGE 3: CONTINUOUS DEPLOYMENT (ORCHESTRATION LAYER)
+  # STAGE 3: CONTINUOUS DEPLOYMENT & MONITORING SETUP
   # ==========================================
   deploy-to-kubernetes:
     name: Continuous Deployment (CD to K8s)
-    needs: container-security # Final Security Gate: Scanner approved safe artifacts hi target honge
+    needs: container-security
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Deployment Manifests
@@ -80,16 +80,19 @@ jobs:
 
       - name: Inject Configuration Variables & Apply Manifests
         run: |
-          # Dynamic placeholder processing to map authenticated username inside deployment spec
+          # Dynamic placeholder processing
           sed -i 's/DOCKERHUB_USERNAME/${{ secrets.DOCKERHUB_USERNAME }}/g' k8s/deployment.yaml
           
-          # FIX: Bypassing public IP TLS certificate verification issues
+          # Core Application Deployment
           kubectl apply -f k8s/deployment.yaml --insecure-skip-tls-verify
           kubectl apply -f k8s/service.yaml --insecure-skip-tls-verify
+          
+          # 🆕 Automated Real-Time Monitoring Infrastructure Rollout
+          kubectl apply -f k8s/monitoring/prometheus.yaml --insecure-skip-tls-verify
+          kubectl apply -f k8s/monitoring/grafana.yaml --insecure-skip-tls-verify
 
       - name: Verify Live Rolling Update Status
         run: |
-          # 120s dynamic boundary checkout for zero-downtime health matrix check
           kubectl rollout status deployment/devsecops-app-deployment --timeout=120s --insecure-skip-tls-verify
 
   # ==========================================
@@ -97,22 +100,18 @@ jobs:
   # ==========================================
   dast-zap-scan:
     name: OWASP ZAP DAST Live Penetration Scan
-    needs: deploy-to-kubernetes # Strict Order: Application K8s par rollout hone ke BAAD hi hit karega
+    needs: deploy-to-kubernetes
     runs-on: ubuntu-latest
-    
-    # 🚨 FIX: Explicit permissions scope setup to avoid 403 authorization failures on issues creation
     permissions:
       contents: write
       issues: write
-
     steps:
       - name: Execute OWASP ZAP Baseline Scan
         uses: zaproxy/action-baseline@v0.14.0
         with:
-          # Aapke AWS EC2 NodePort application ka active user endpoint URL
           target: 'http://52.91.56.8:30080'
           token: ${{ secrets.GITHUB_TOKEN }}
-          fail_action: false # Baseline scanning alerts par pipeline break nahi karegi, report generate karegi
+          fail_action: false
 
       - name: Upload ZAP Security HTML Report
         uses: actions/upload-artifact@v4
