@@ -93,12 +93,18 @@ jobs:
           kubectl rollout status deployment/devsecops-app-deployment --timeout=120s --insecure-skip-tls-verify
 
   # ==========================================
-  # 🆕 STAGE 4: DYNAMIC APPLICATION SECURITY TESTING (DAST)
+  # STAGE 4: DYNAMIC APPLICATION SECURITY TESTING (DAST)
   # ==========================================
   dast-zap-scan:
     name: OWASP ZAP DAST Live Penetration Scan
     needs: deploy-to-kubernetes # Strict Order: Application K8s par rollout hone ke BAAD hi hit karega
     runs-on: ubuntu-latest
+    
+    # 🚨 FIX: Explicit permissions scope setup to avoid 403 authorization failures on issues creation
+    permissions:
+      contents: write
+      issues: write
+
     steps:
       - name: Execute OWASP ZAP Baseline Scan
         uses: zaproxy/action-baseline@v0.14.0
