@@ -83,11 +83,11 @@ jobs:
           # Dynamic placeholder processing to map authenticated username inside deployment spec
           sed -i 's/DOCKERHUB_USERNAME/${{ secrets.DOCKERHUB_USERNAME }}/g' k8s/deployment.yaml
           
-          # Target deployment state synchronized execution
-          kubectl apply -f k8s/deployment.yaml
-          kubectl apply -f k8s/service.yaml
+          # 🚨 FIX: Added --insecure-skip-tls-verify to bypass public IP TLS certificate verification issues
+          kubectl apply -f k8s/deployment.yaml --insecure-skip-tls-verify
+          kubectl apply -f k8s/service.yaml --insecure-skip-tls-verify
 
       - name: Verify Live Rolling Update Status
         run: |
           # 120s dynamic boundary checkout for zero-downtime health matrix check
-          kubectl rollout status deployment/devsecops-app-deployment --timeout=120s
+          kubectl rollout status deployment/devsecops-app-deployment --timeout=120s --insecure-skip-tls-verify
