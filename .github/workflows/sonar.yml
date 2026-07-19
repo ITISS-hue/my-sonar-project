@@ -83,7 +83,7 @@ jobs:
           # Dynamic placeholder processing to map authenticated username inside deployment spec
           sed -i 's/DOCKERHUB_USERNAME/${{ secrets.DOCKERHUB_USERNAME }}/g' k8s/deployment.yaml
           
-          # 🚨 FIX: Added --insecure-skip-tls-verify to bypass public IP TLS certificate verification issues
+          # FIX: Bypassing public IP TLS certificate verification issues
           kubectl apply -f k8s/deployment.yaml --insecure-skip-tls-verify
           kubectl apply -f k8s/service.yaml --insecure-skip-tls-verify
 
@@ -91,3 +91,25 @@ jobs:
         run: |
           # 120s dynamic boundary checkout for zero-downtime health matrix check
           kubectl rollout status deployment/devsecops-app-deployment --timeout=120s --insecure-skip-tls-verify
+
+  # ==========================================
+  # 🆕 STAGE 4: DYNAMIC APPLICATION SECURITY TESTING (DAST)
+  # ==========================================
+  dast-zap-scan:
+    name: OWASP ZAP DAST Live Penetration Scan
+    needs: deploy-to-kubernetes # Strict Order: Application K8s par rollout hone ke BAAD hi hit karega
+    runs-on: ubuntu-latest
+    steps:
+      - name: Execute OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          # Aapke AWS EC2 NodePort application ka active user endpoint URL
+          target: 'http://52.91.56.8:30080'
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fail_action: false # Baseline scanning alerts par pipeline break nahi karegi, report generate karegi
+
+      - name: Upload ZAP Security HTML Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: owasp-zap-dast-report
+          path: report_html.html
