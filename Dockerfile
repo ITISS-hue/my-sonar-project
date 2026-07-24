@@ -3,17 +3,16 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /usr/src/app
 
-# System build dependencies install karne ke liye (psutil ke compilation ke liye zaroori hai)
+# System build dependencies (psutil compilation ke liye)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Cache optimization ke liye requirements pehle copy kar rahe hain
 COPY requirements.txt ./
 
-# Global path settings ke bina standard local directory mein wheels build karna
-RUN pip install --no-cache-dir --user -r requirements.txt
+# Packages ko system site-packages mein install kar rahe hain
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 
 # --- Stage 2: Final Secure Runtime Image ---
@@ -22,7 +21,6 @@ FROM python:3.12-slim AS runner
 # Python optimization parameters setting
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV PATH=/home/appuser/.local/bin:$PATH
 
 WORKDIR /usr/src/app
 
@@ -30,16 +28,16 @@ WORKDIR /usr/src/app
 RUN groupadd -g 10001 appuser && \
     useradd -u 10001 -g appuser -m -s /bin/bash appuser
 
-# Stage 1 se built python packages ko user directory mein copy karna
-COPY --from=builder --chown=appuser:appuser /root/.local /home/appuser/.local
-# Main application code script copy karna root privileges ke bina
+# Stage 1 se installed python packages ko standard python library path par copy karna
+COPY --from=builder /install /usr/local
+
+# Main application code script copy karna non-root user permissions ke saath
 COPY --chown=appuser:appuser app.py ./
 
-# Port 80 open karna (Flask internal mapping matching deployment specs)
 EXPOSE 80
 
-# Non-root user par context switch karna
+# Non-root user context switch
 USER appuser
 
-# Bufferless tracking mode execute karne ke liye cmd parameter mapping
+# Bufferless tracking mode execution
 CMD [ "python", "-u", "app.py" ]
