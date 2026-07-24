@@ -1,11 +1,17 @@
 #comment 1
-from flask import Flask, jsonify, render_template_string
+from flask import Flask, jsonify, render_template_string, Response
 import json
 import platform
 import os
 import psutil # Ensure psutil is installed if you want real metrics, or fallback safely
+from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST
 
 app = Flask(__name__)
+
+# 📊 PROMETHEUS METRIC DEFINITIONS
+HTTP_REQUESTS = Counter('http_requests_total', 'Total HTTP Requests', ['method', 'endpoint'])
+CPU_GAUGE = Gauge('container_cpu_usage_percent', 'Current Container CPU Usage')
+MEM_GAUGE = Gauge('container_memory_usage_percent', 'Current Container Memory Usage')
 
 # Basic system diagnostics generator logic
 def get_diagnostics():
@@ -15,6 +21,10 @@ def get_diagnostics():
     except Exception:
         cpu_load = 0.0
         memory_usage = 0.0
+
+    # Prometheus gauges update
+    CPU_GAUGE.set(cpu_load)
+    MEM_GAUGE.set(memory_usage)
 
     return {
         "status": "UP",
@@ -77,6 +87,7 @@ HTML_TEMPLATE = """
 # Web server root traffic listener gateway route
 @app.route('/')
 def home():
+    HTTP_REQUESTS.labels(method='GET', endpoint='/').inc()
     data = get_diagnostics()
     raw_json = json.dumps(data, indent=2)
     return render_template_string(HTML_TEMPLATE, data=data, raw_json=raw_json)
@@ -84,7 +95,14 @@ def home():
 # K8s Health Check Probes Endpoint Route (Highly Recommended practice)
 @app.route('/health')
 def health_check():
+    HTTP_REQUESTS.labels(method='GET', endpoint='/health').inc()
     return jsonify({"status": "healthy"}), 200
+
+# 🟢 NEW: PROMETHEUS SCRAPE ENDPOINT (Fixes 404 Error in Prometheus Target UI)
+@app.route('/metrics')
+def metrics():
+    get_diagnostics() # Refresh metrics before serving
+    return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
 
 if __name__ == '__main__':
     print("[INFO] Python Web Server Engine initialization sequence triggered.", flush=True)
